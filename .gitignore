@@ -1,0 +1,6 @@
+*.project
+*.propath
+*.r
+.settings/
+db/
+xml/
