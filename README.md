@@ -14,6 +14,6 @@ Then load and run the program 'readFolder.p'. You might need to change the folde
 
 Wait until the data is loaded. This might take a while. 
 
-Then use a tool like DataDigger to explore the data. 
+Then use a tool like [DataDigger](https://github.com/patrickTingen/DataDigger) to explore the data. 
 
 Have fun!
