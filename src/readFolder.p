@@ -33,7 +33,7 @@ OUTPUT STREAM dbg TO VALUE(SUBSTITUTE("&1\XrefLoad_&2.log", SESSION:TEMP-DIRECTO
 
 /* RUN emptyDb. */
 RUN readFolder('c:\Data\progress\xref\xml\').
-RUN readFiles('Palcos').
+RUN readFiles('MyApplicationName').
 RUN showTimers.
 PUBLISH 'debugInfo'(SUBSTITUTE('Unsupported reference types: &1', gcRefTypes)).
 
