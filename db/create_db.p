@@ -12,6 +12,7 @@ DO:
 END.
 
 CREATE DATABASE 'xrefdb' FROM OS-GETENV('dlc') + '\empty8.db' REPLACE.
+ASSIGN FILE-INFO:FILE-NAME = cDatabase.
 CONNECT 'xrefdb' -1.
 RUN prodict/load_df.p (INPUT "xrefdb.df").
 

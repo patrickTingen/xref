@@ -1,68 +1,3 @@
-ADD TABLE "xref_Environment"
-  AREA "Data"
-  DESCRIPTION "List of all environments"
-  DUMP-NAME "environm"
-
-ADD FIELD "cEnvironment" OF "xref_Environment" AS character 
-  FORMAT "X(20)"
-  INITIAL ""
-  LABEL "Environment"
-  POSITION 2
-  MAX-WIDTH 40
-  ORDER 20
-
-ADD FIELD "cDescription" OF "xref_Environment" AS character 
-  FORMAT "X(40)"
-  INITIAL ""
-  LABEL "Description"
-  POSITION 3
-  MAX-WIDTH 80
-  ORDER 30
-
-ADD FIELD "cPath" OF "xref_Environment" AS character 
-  FORMAT "X(80)"
-  INITIAL ""
-  LABEL "Path"
-  POSITION 4
-  MAX-WIDTH 160
-  ORDER 40
-
-ADD FIELD "cSrc" OF "xref_Environment" AS character 
-  FORMAT "X(20)"
-  INITIAL ""
-  LABEL "Source Dir"
-  POSITION 5
-  MAX-WIDTH 40
-  ORDER 50
-
-ADD FIELD "cType" OF "xref_Environment" AS character 
-  DESCRIPTION "Type (MFG/Pro etc)"
-  FORMAT "X(8)"
-  INITIAL ""
-  LABEL "Type"
-  POSITION 6
-  MAX-WIDTH 16
-  ORDER 60
-
-ADD FIELD "iEnvironmentNr" OF "xref_Environment" AS int64 
-  FORMAT ">>>>>>>>>>>>>>>>>9"
-  INITIAL "0"
-  LABEL "Environment"
-  POSITION 7
-  MAX-WIDTH 4
-  ORDER 10
-
-ADD INDEX "idxPrim" ON "xref_Environment" 
-  AREA "Index"
-  UNIQUE
-  PRIMARY
-  INDEX-FIELD "iEnvironmentNr" ASCENDING 
-
-ADD INDEX "idxEnvironment" ON "xref_Environment" 
-  AREA "Index"
-  UNIQUE
-  INDEX-FIELD "cEnvironment" ASCENDING 
-
 ADD TABLE "xref_Object"
   AREA "Data"
   DUMP-NAME "xref_Object"
@@ -72,40 +7,34 @@ ADD FIELD "cObjectType" OF "xref_Object" AS character
   FORMAT "X(12)"
   INITIAL ""
   LABEL "Object type"
-  POSITION 3
+  POSITION 2
   MAX-WIDTH 24
   COLUMN-LABEL "Object type"
-  ORDER 20
+  HELP "type of the object"
+  ORDER 10
+  MANDATORY
 
 ADD FIELD "cObjectName" OF "xref_Object" AS character 
   DESCRIPTION "name of the object"
   FORMAT "x(40)"
   INITIAL ""
   LABEL "Object name"
-  POSITION 4
+  POSITION 3
   MAX-WIDTH 80
   COLUMN-LABEL "Object name"
-  ORDER 30
-
-ADD FIELD "iEnvironmentNr" OF "xref_Object" AS int64 
-  FORMAT ">>>>>>>>>>>>>>>>>9"
-  INITIAL "0"
-  LABEL "Environment"
-  POSITION 5
-  MAX-WIDTH 4
-  ORDER 10
+  HELP "name of the object"
+  ORDER 20
+  MANDATORY
 
 ADD INDEX "idxPrim" ON "xref_Object" 
   AREA "Index"
   UNIQUE
   PRIMARY
-  INDEX-FIELD "iEnvironmentNr" ASCENDING 
   INDEX-FIELD "cObjectType" ASCENDING 
   INDEX-FIELD "cObjectName" ASCENDING 
 
 ADD INDEX "idxObjectName" ON "xref_Object" 
   AREA "Index"
-  INDEX-FIELD "iEnvironmentNr" ASCENDING 
   INDEX-FIELD "cObjectName" ASCENDING 
 
 ADD INDEX "idxObjectType" ON "xref_Object" 
@@ -114,16 +43,21 @@ ADD INDEX "idxObjectType" ON "xref_Object"
 
 ADD TABLE "xref_ObjectType"
   AREA "Data"
-  DUMP-NAME "objectty-------1"
+  LABEL "Object type"
+  DESCRIPTION "Type of xref object (file, field etc)"
+  DUMP-NAME "xref_ObjectType"
 
 ADD FIELD "cObjectType" OF "xref_ObjectType" AS character 
+  DESCRIPTION "Object type"
   FORMAT "x(12)"
   INITIAL ""
-  LABEL "object type"
+  LABEL "Object type"
   POSITION 2
   MAX-WIDTH 24
-  COLUMN-LABEL "object type"
+  COLUMN-LABEL "Object type"
+  HELP "Object type"
   ORDER 10
+  MANDATORY
 
 ADD INDEX "idxPrim" ON "xref_ObjectType" 
   AREA "Index"
@@ -133,70 +67,74 @@ ADD INDEX "idxPrim" ON "xref_ObjectType"
 
 ADD TABLE "xref_Relation"
   AREA "Data"
+  LABEL "xref_Relation"
+  DESCRIPTION "relation between 2 xref objects"
   DUMP-NAME "xref_Relation"
 
 ADD FIELD "cRelationType" OF "xref_Relation" AS character 
-  FORMAT "x(12)"
+  DESCRIPTION "Relation type"
+  FORMAT "x(20)"
   INITIAL ""
-  LABEL "relation type"
-  POSITION 3
+  LABEL "Relation type"
+  POSITION 2
   MAX-WIDTH 24
-  COLUMN-LABEL "relation type"
-  ORDER 20
-
-ADD FIELD "cParentName" OF "xref_Relation" AS character 
-  DESCRIPTION "name of the parent object"
-  FORMAT "x(40)"
-  INITIAL ""
-  LABEL "Parent name"
-  POSITION 6
-  MAX-WIDTH 80
-  COLUMN-LABEL "Parent name"
-  ORDER 40
-
-ADD FIELD "cChildName" OF "xref_Relation" AS character 
-  DESCRIPTION "name of the child object"
-  FORMAT "x(40)"
-  INITIAL ""
-  LABEL "Child name"
-  POSITION 7
-  MAX-WIDTH 80
-  COLUMN-LABEL "Child name"
-  ORDER 60
+  COLUMN-LABEL "Relation type"
+  HELP "relation type"
+  ORDER 10
+  MANDATORY
 
 ADD FIELD "cParentType" OF "xref_Relation" AS character 
   DESCRIPTION "type of the parent object "
   FORMAT "X(12)"
   INITIAL ""
   LABEL "Parent type"
-  POSITION 8
+  POSITION 3
   MAX-WIDTH 24
   COLUMN-LABEL "Parent type"
+  HELP "type of the parent object"
+  ORDER 20
+  MANDATORY
+
+ADD FIELD "cParentName" OF "xref_Relation" AS character 
+  DESCRIPTION "name of the parent object"
+  FORMAT "x(40)"
+  INITIAL ""
+  LABEL "Parent name"
+  POSITION 4
+  MAX-WIDTH 80
+  COLUMN-LABEL "Parent name"
+  HELP "name of the parent object"
   ORDER 30
+  MANDATORY
 
 ADD FIELD "cChildType" OF "xref_Relation" AS character 
   DESCRIPTION "type of the child object "
   FORMAT "X(12)"
   INITIAL ""
   LABEL "Child type"
-  POSITION 9
+  POSITION 5
   MAX-WIDTH 24
   COLUMN-LABEL "Child type"
-  ORDER 50
+  HELP "type of the child object"
+  ORDER 40
+  MANDATORY
 
-ADD FIELD "iEnvironmentNr" OF "xref_Relation" AS int64 
-  FORMAT ">>>>>>>>>>>>>>>>>9"
-  INITIAL "0"
-  LABEL "Environment"
-  POSITION 10
-  MAX-WIDTH 8
-  ORDER 10
+ADD FIELD "cChildName" OF "xref_Relation" AS character 
+  DESCRIPTION "name of the child object"
+  FORMAT "x(40)"
+  INITIAL ""
+  LABEL "Child name"
+  POSITION 6
+  MAX-WIDTH 80
+  COLUMN-LABEL "Child name"
+  HELP "name of the child object"
+  ORDER 50
+  MANDATORY
 
 ADD INDEX "idxPrim" ON "xref_Relation" 
   AREA "Index"
   UNIQUE
   PRIMARY
-  INDEX-FIELD "iEnvironmentNr" ASCENDING 
   INDEX-FIELD "cRelationType" ASCENDING 
   INDEX-FIELD "cParentType" ASCENDING 
   INDEX-FIELD "cParentName" ASCENDING 
@@ -205,41 +143,41 @@ ADD INDEX "idxPrim" ON "xref_Relation"
 
 ADD INDEX "idxChildName" ON "xref_Relation" 
   AREA "Index"
-  INDEX-FIELD "iEnvironmentNr" ASCENDING 
   INDEX-FIELD "cChildName" ASCENDING 
 
 ADD INDEX "idxChildType" ON "xref_Relation" 
   AREA "Index"
-  INDEX-FIELD "iEnvironmentNr" ASCENDING 
   INDEX-FIELD "cChildType" ASCENDING 
 
 ADD INDEX "idxParentName" ON "xref_Relation" 
   AREA "Index"
-  INDEX-FIELD "iEnvironmentNr" ASCENDING 
   INDEX-FIELD "cParentName" ASCENDING 
 
 ADD INDEX "idxParentType" ON "xref_Relation" 
   AREA "Index"
-  INDEX-FIELD "iEnvironmentNr" ASCENDING 
   INDEX-FIELD "cParentType" ASCENDING 
 
 ADD INDEX "idxRelationType" ON "xref_Relation" 
   AREA "Index"
-  INDEX-FIELD "iEnvironmentNr" ASCENDING 
   INDEX-FIELD "cRelationType" ASCENDING 
 
 ADD TABLE "xref_RelationType"
   AREA "Data"
-  DUMP-NAME "reltype-------1"
+  LABEL "xref_RelationType"
+  DESCRIPTION "Type of relation between 2 xref objects"
+  DUMP-NAME "xref_RelationType"
 
 ADD FIELD "cRelationType" OF "xref_RelationType" AS character 
-  FORMAT "x(12)"
+  DESCRIPTION "Relation type"
+  FORMAT "x(20)"
   INITIAL ""
-  LABEL "relation type"
+  LABEL "Relation type"
   POSITION 2
   MAX-WIDTH 24
-  COLUMN-LABEL "relation type"
+  COLUMN-LABEL "Relation type"
+  HELP "relation type"
   ORDER 10
+  MANDATORY
 
 ADD INDEX "relationtype_prim" ON "xref_RelationType" 
   AREA "Index"
@@ -249,26 +187,45 @@ ADD INDEX "relationtype_prim" ON "xref_RelationType"
 
 ADD TABLE "xref_XmlFile"
   AREA "Data"
-  LABEL "Xref XML File"
+  LABEL "xref_XmlFile"
+  DESCRIPTION "File with xref info in xml format"
   DUMP-NAME "xref_xmlfile"
 
 ADD FIELD "cFullName" OF "xref_XmlFile" AS character 
+  DESCRIPTION "XML Fullname"
   FORMAT "x(60)"
   INITIAL ""
   LABEL "XML Fullname"
   POSITION 2
   MAX-WIDTH 120
   COLUMN-LABEL "XML Fullname"
+  HELP "XML Fullname"
   ORDER 10
+  MANDATORY
 
-ADD FIELD "cLastModified" OF "xref_XmlFile" AS character 
-  FORMAT "x(20)"
-  INITIAL ""
+ADD FIELD "dtLastModified" OF "xref_XmlFile" AS datetime 
+  DESCRIPTION "Last Modified"
+  FORMAT "99/99/9999 HH:MM:SS"
+  INITIAL ?
   LABEL "Last Modified"
   POSITION 3
-  MAX-WIDTH 40
+  MAX-WIDTH 8
   COLUMN-LABEL "Last Modified"
+  HELP "Last Modified"
   ORDER 20
+  MANDATORY
+
+ADD FIELD "cHashValue" OF "xref_XmlFile" AS character 
+  DESCRIPTION "generated hash value for the xref file"
+  FORMAT "x(20)"
+  INITIAL ""
+  LABEL "Hash value"
+  POSITION 4
+  MAX-WIDTH 40
+  COLUMN-LABEL "Hash value"
+  HELP "hash value"
+  ORDER 30
+  MANDATORY
 
 ADD INDEX "idxPrim" ON "xref_XmlFile" 
   AREA "Index"
@@ -278,10 +235,10 @@ ADD INDEX "idxPrim" ON "xref_XmlFile"
 
 ADD INDEX "idxLastModified" ON "xref_XmlFile" 
   AREA "Index"
-  INDEX-FIELD "cLastModified" ASCENDING 
+  INDEX-FIELD "dtLastModified" ASCENDING 
 
 .
 PSC
-cpstream=ISO8859-1
+cpstream=1252
 .
-0000006416
+0000005587
