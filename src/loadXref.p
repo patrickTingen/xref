@@ -1,6 +1,6 @@
-/*------------------------------------------------------------------------
-    File        : loadXref.p
-    Purpose     : Import one Xref XML file into the Xref Database
+/*-----------------------------------------------------------------------
+  File : loadXref.p
+  Desc : Import one Xref XML file into the Xref Database
   ----------------------------------------------------------------------*/
 
 DEFINE INPUT PARAMETER pcXrefFolder    AS CHARACTER NO-UNDO.
@@ -56,44 +56,12 @@ DEFINE DATASET dsCrossRef XML-NODE-NAME "Cross-reference"
 
 DEFINE VARIABLE gcProgramName AS CHARACTER NO-UNDO. /* name of the program being evaluated */
 
-FUNCTION getFileHash RETURNS CHARACTER (pcFile AS CHARACTER):
-  /* Return a hash value for the xref file. 
-  ** Note that the tag <Source-guid> needs to be removed
-  */
-  DEFINE VARIABLE cData  AS LONGCHAR  NO-UNDO.
-  DEFINE VARIABLE iStart AS INTEGER   NO-UNDO.
-  DEFINE VARIABLE iEnd   AS INTEGER   NO-UNDO.
-  DEFINE VARIABLE cGuid  AS CHARACTER NO-UNDO.
-
-  COPY-LOB FILE pcFile TO cData.
-  iStart = INDEX(cData,'<Source-guid>').
-  iEnd   = INDEX(cData,'</Source-guid>').
-  cGuid  = SUBSTRING(cData,iStart,iEnd - iStart + 14).
-  cData  = REPLACE(cData,cGuid,'<Source-guid></Source-guid>').
-
-  RETURN STRING(MD5-DIGEST( cData )).
-END FUNCTION. /* getFileHash */
-
-
-FUNCTION stripPathNames RETURNS CHARACTER
-  ( pcFileName AS CHARACTER ):
-
-  {&timerStart}
-  pcFileName = TRIM(pcFileName).
-  pcFileName = REPLACE(pcFileName,"~/","~\"). /* use one style of slashes */
-  pcFileName = ENTRY(1,pcFileName, ' '). /* strip trailing parameter info */
-  
-  IF pcFileName BEGINS pcPathToStrip THEN 
-    pcFileName = SUBSTRING(pcFileName,LENGTH(pcPathToStrip) + 1). /* strip base path */
-
-  IF pcFileName BEGINS '.\' THEN 
-    pcFileName = SUBSTRING(pcFileName,3). /* strip .\ */
-
-  RETURN pcFileName.
-  {&timerStop}
-END FUNCTION. /* stripPathNames */
+FUNCTION getFileHash RETURNS CHARACTER(pcFile AS CHARACTER) FORWARD.
+FUNCTION stripPathNames RETURNS CHARACTER(pcFileName AS CHARACTER) FORWARD.
 
 /* ***************************  Main Block  *************************** */
+
+PAUSE 0 BEFORE-HIDE.
 
 IF pcRelationTypes = '' THEN pcRelationTypes = '*'.
 IF pcObjectTypes = '' THEN pcObjectTypes = '*'.
@@ -105,20 +73,22 @@ RUN processFiles.
 PROCEDURE processFiles:
   /* Process all XML files one by one
   */
-  DEFINE VARIABLE iNumTodo AS INTEGER NO-UNDO.
-  DEFINE VARIABLE iNumDone AS INTEGER NO-UNDO.
+  DEFINE VARIABLE iTodo AS INTEGER NO-UNDO.
+  DEFINE VARIABLE iDone AS INTEGER NO-UNDO.
   DEFINE BUFFER bFile FOR ttFile.
 
   RUN readFolder(pcXrefFolder).
+  
   FOR EACH bFile: 
-    iNumTodo = iNumTodo + 1.
+    iTodo = iTodo + 1.
   END. 
   
   FOR EACH bFile:
+    iDone = iDone + 1.
+    MESSAGE SUBSTITUTE('&1 Loading &2 of &3: &4', STRING(TIME,'hh:mm:ss'), iDone, iTodo, bFile.cFullName).
     RUN loadXref(bFile.cFullName).
-    iNumDone = iNumDone + 1.
-    MESSAGE SUBSTITUTE('&1 / &2 &3', iNumDone, iNumTodo, bFile.cFullName).
-    PROCESS EVENTS. 
+
+    PROCESS EVENTS.
   END. /* FOR EACH bFile */
 END PROCEDURE. /* processFiles */
 
@@ -131,16 +101,12 @@ PROCEDURE readFolder:
   DEFINE VARIABLE cFile AS CHARACTER NO-UNDO EXTENT 3.
   DEFINE BUFFER bFile FOR ttFile.
   
-  MESSAGE 'Reading folder' pcFolder.
-
   INPUT FROM OS-DIR(pcFolder).
   REPEAT:       
     IMPORT cFile.
-    IF cFile[1] BEGINS '.' THEN NEXT. 
-                         
-    IF cFile[3] BEGINS 'D' THEN 
-      RUN readFolder(cFile[2]).
-    ELSE 
+    IF cFile[1] BEGINS '.' THEN NEXT.
+    IF cFile[3] BEGINS 'D' THEN RUN readFolder(cFile[2]).
+    IF cFile[3] BEGINS 'F' THEN
     DO:
       CREATE bFile.
       ASSIGN bFile.cFullName = cFile[2].
@@ -617,7 +583,12 @@ PROCEDURE Process_INCLUDE:
     </Reference>
   */
   cInclude = stripPathNames(bReference.Object-identifier).
+
+  /* Strip arguments/line feeds from the include name */
+  cInclude = ENTRY(1,cInclude,'~n').
+  cInclude = ENTRY(1,cInclude,'&').
   cInclude = REPLACE(cInclude,'"', '').
+  cInclude = TRIM(cInclude).
 
   IF cInclude = '"'
     OR cInclude = ''
@@ -1046,3 +1017,41 @@ PROCEDURE Process_UPDATE:
   END.
   {&timerStop}
 END PROCEDURE. /* Process_UPDATE */
+
+
+FUNCTION getFileHash RETURNS CHARACTER (pcFile AS CHARACTER):
+  /* Return a hash value for the xref file.
+  ** Note that the tag <Source-guid> needs to be removed
+  */
+  DEFINE VARIABLE cData  AS LONGCHAR  NO-UNDO.
+  DEFINE VARIABLE iStart AS INTEGER   NO-UNDO.
+  DEFINE VARIABLE iEnd   AS INTEGER   NO-UNDO.
+  DEFINE VARIABLE cGuid  AS CHARACTER NO-UNDO.
+
+  COPY-LOB FILE pcFile TO cData.
+  iStart = INDEX(cData,'<Source-guid>').
+  iEnd   = INDEX(cData,'</Source-guid>').
+  cGuid  = SUBSTRING(cData,iStart,iEnd - iStart + 14).
+  cData  = REPLACE(cData,cGuid,'<Source-guid></Source-guid>').
+
+  RETURN STRING(MD5-DIGEST( cData )).
+END FUNCTION. /* getFileHash */
+
+
+FUNCTION stripPathNames RETURNS CHARACTER
+  ( pcFileName AS CHARACTER ):
+
+  {&timerStart}
+  pcFileName = TRIM(pcFileName).
+  pcFileName = REPLACE(pcFileName,"~/","~\"). /* use one style of slashes */
+  pcFileName = ENTRY(1,pcFileName, ' '). /* strip trailing parameter info */
+
+  IF pcFileName BEGINS pcPathToStrip THEN
+    pcFileName = SUBSTRING(pcFileName,LENGTH(pcPathToStrip) + 1). /* strip base path */
+
+  IF pcFileName BEGINS '.\' THEN
+    pcFileName = SUBSTRING(pcFileName,3). /* strip .\ */
+
+  RETURN pcFileName.
+  {&timerStop}
+END FUNCTION. /* stripPathNames */
