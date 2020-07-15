@@ -2,7 +2,15 @@
 *.propath
 *.r
 .settings/
-db/
+db/xrefdb-empty.zip
+db/xrefdb.db
+db/xrefdb.lk
+db/xrefdb.d1
+db/xrefdb.b1
+db/xrefdb.lic
+db/xrefdb.lg
+db/xrefdb_7.d1
+db/xrefdb_8.d1
 html/
 palcos/
 src.debug/
