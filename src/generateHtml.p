@@ -40,6 +40,7 @@ PROCEDURE generateHtml:
     iDone = iDone + 1.
     IF ETIME > 1000 THEN DO:
       MESSAGE SUBSTITUTE('&1 Generating HTML &2 of &3: &4', STRING(TIME,'hh:mm:ss'), iDone, iTodo, bObject.cObjectName).
+      PROCESS EVENTS. 
       ETIME(YES).
     END.
     PROCESS EVENTS.

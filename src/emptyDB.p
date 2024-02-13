@@ -5,6 +5,9 @@
 
 PAUSE 0 BEFORE-HIDE.
 
+PUBLISH "xref-log" ("Cleaning up database").
+PROCESS EVENTS. 
+
 RUN delete_general_tables.
 RUN delete_xref_Object.
 RUN delete_xref_Relation.
@@ -39,7 +42,7 @@ PROCEDURE delete_xref_Object:
         iDeleted = iDeleted + 1.
         IF iDeleted MOD 1000 = 0 THEN LEAVE. 
       END.
-      MESSAGE iDeleted 'xref_Object records deleted'.
+      PUBLISH "xref-log" (SUBSTITUTE("&1 xref_Object records deleted", iDeleted)).
       PROCESS EVENTS. 
     END. /* trans */
   END.
@@ -57,7 +60,7 @@ PROCEDURE delete_xref_Relation:
         iDeleted = iDeleted + 1.
         IF iDeleted MOD 1000 = 0 THEN LEAVE. 
       END.
-      MESSAGE iDeleted 'xref_Relation records deleted'.
+      PUBLISH "xref-log" (SUBSTITUTE("&1 xref_Relation records deleted", iDeleted)).
       PROCESS EVENTS. 
     END. /* trans */
   END.

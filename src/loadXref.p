@@ -5,59 +5,20 @@
 
 DEFINE INPUT PARAMETER pcXrefFolder    AS CHARACTER NO-UNDO.
 DEFINE INPUT PARAMETER pcPathToStrip   AS CHARACTER NO-UNDO.
+DEFINE INPUT PARAMETER pcSkipFolders   AS CHARACTER NO-UNDO.
 DEFINE INPUT PARAMETER pcRelationTypes AS CHARACTER NO-UNDO.
 DEFINE INPUT PARAMETER pcObjectTypes   AS CHARACTER NO-UNDO.
-
-/* Timers to measure performance */
-&GLOBAL-DEFINE timerStart PUBLISH 'timerStart' (ENTRY(1,PROGRAM-NAME(1),' ')).
-&GLOBAL-DEFINE timerStop  FINALLY: PUBLISH 'timerStop'  (ENTRY(1,PROGRAM-NAME(1),' ')). END.
 
 DEFINE TEMP-TABLE ttFile NO-UNDO
   FIELD cFullName AS CHARACTER.
 
-DEFINE TEMP-TABLE ttSource NO-UNDO       XML-NODE-NAME "source"
-  FIELD File-name   AS CHARACTER         XML-NODE-TYPE "attribute"
-  FIELD Source-guid AS CHARACTER
-  FIELD File-num    AS INTEGER           XML-DATA-TYPE "byte"
-  FIELD cObjectType AS CHARACTER.
-
-DEFINE TEMP-TABLE ttReference NO-UNDO    XML-NODE-NAME "reference"
-  FIELD Reference-type    AS CHARACTER   XML-NODE-TYPE "attribute"
-  FIELD Object-identifier AS CHARACTER   XML-NODE-TYPE "attribute"
-  FIELD Source-guid       AS CHARACTER
-  FIELD File-num          AS INTEGER     XML-DATA-TYPE "byte"
-  FIELD Ref-seq           AS INTEGER     XML-DATA-TYPE "short"
-  FIELD Line-num          AS INTEGER     XML-DATA-TYPE "short"
-  FIELD Object-context    AS CHARACTER
-  FIELD Access-mode       AS CHARACTER
-  FIELD Data-member-ref   AS CHARACTER
-  FIELD Temp-ref          AS CHARACTER
-  FIELD Detail            AS CHARACTER
-  FIELD Is-static         AS CHARACTER
-  FIELD Is-abstract       AS CHARACTER
-  FIELD Source_id         AS RECID       XML-NODE-TYPE "hidden"
-  INDEX iPrim AS PRIMARY Source-guid Reference-type Temp-ref Detail Object-identifier Object-context
-  INDEX iType Reference-type.
-
-DEFINE TEMP-TABLE ttStringRef NO-UNDO XML-NODE-NAME "string-ref"
-  FIELD Source-guid   AS CHARACTER
-  FIELD Ref-seq       AS INTEGER      XML-DATA-TYPE "short"
-  FIELD Max-length    AS INTEGER      XML-DATA-TYPE "byte"
-  FIELD Justification AS CHARACTER
-  FIELD Translatable  AS CHARACTER
-  FIELD Reference_id  AS RECID        XML-NODE-TYPE "HIDDEN".
-
-DEFINE DATASET dsCrossRef XML-NODE-NAME "Cross-reference"
-  FOR ttSource, ttReference, ttStringRef
-  PARENT-ID-RELATION RELATION1 FOR ttReference, ttStringRef
-  PARENT-ID-FIELD Reference_id
-  PARENT-ID-RELATION RELATION2 FOR ttSource, ttReference
-  PARENT-ID-FIELD Source_id.
+{xrefd0005.i}
 
 DEFINE VARIABLE gcProgramName AS CHARACTER NO-UNDO. /* name of the program being evaluated */
 
 FUNCTION getFileHash RETURNS CHARACTER(pcFile AS CHARACTER) FORWARD.
-FUNCTION stripPathNames RETURNS CHARACTER(pcFileName AS CHARACTER) FORWARD.
+FUNCTION stripPathNames RETURNS CHARACTER
+  ( pcFileName AS CHARACTER ) FORWARD.
 
 /* ***************************  Main Block  *************************** */
 
@@ -66,10 +27,26 @@ PAUSE 0 BEFORE-HIDE.
 IF pcRelationTypes = '' THEN pcRelationTypes = '*'.
 IF pcObjectTypes = '' THEN pcObjectTypes = '*'.
 
+RUN getSkipFolders(pcSkipFolders, OUTPUT pcSkipFolders).
 RUN processFiles.
 
 
 /* **********************  Internal Procedures  *********************** */
+PROCEDURE getSkipFolders:
+  /* Build can-do-able list of folders 
+  */
+  DEFINE INPUT  PARAMETER pcListIn  AS CHARACTER NO-UNDO.
+  DEFINE OUTPUT PARAMETER pcListOut AS CHARACTER NO-UNDO.
+
+  DEFINE VARIABLE i            AS INTEGER   NO-UNDO.
+  DEFINE VARIABLE cSkipFolders AS CHARACTER NO-UNDO.
+
+  DO i = 1 TO NUM-ENTRIES(pcListIn):
+    pcListOut = pcListOut + '*\' + ENTRY(i,pcListIn) + '\*,'.
+  END.
+END PROCEDURE. /* getSkipFolders */
+
+
 PROCEDURE processFiles:
   /* Process all XML files one by one
   */
@@ -85,7 +62,9 @@ PROCEDURE processFiles:
   
   FOR EACH bFile:
     iDone = iDone + 1.
-    MESSAGE SUBSTITUTE('&1 Loading &2 of &3: &4', STRING(TIME,'hh:mm:ss'), iDone, iTodo, bFile.cFullName).
+    PUBLISH "xref-log" (SUBSTITUTE('&1 Loading &2 of &3: &4', STRING(TIME,'hh:mm:ss'), iDone, iTodo, bFile.cFullName)).
+    PROCESS EVENTS. 
+
     RUN loadXref(bFile.cFullName).
 
     PROCESS EVENTS.
@@ -106,6 +85,7 @@ PROCEDURE readFolder:
     IMPORT cFile.
     IF cFile[1] BEGINS '.' THEN NEXT.
     IF cFile[3] BEGINS 'D' THEN RUN readFolder(cFile[2]).
+    IF CAN-DO(pcSkipFolders, cFile[2]) THEN NEXT. 
     IF cFile[3] BEGINS 'F' THEN
     DO:
       CREATE bFile.
@@ -128,15 +108,16 @@ PROCEDURE loadXref:
   DEFINE BUFFER bXmlFile   FOR xref_XmlFile.
   DEFINE BUFFER bSource    FOR ttSource.
   DEFINE BUFFER bReference FOR ttReference.
-  {&timerStart}
 
   PUBLISH 'debugInfo'(SUBSTITUTE("Reading &1", pcFileName)).
+  PROCESS EVENTS. 
 
   /* Check the XML file */
   FILE-INFO:FILE-NAME = pcFileName.
   IF FILE-INFO:FULL-PATHNAME = ? THEN
   DO:
     PUBLISH 'debugInfo'( SUBSTITUTE("Xref file &1 not found", pcFileName )).
+    PROCESS EVENTS. 
     RETURN.
   END.
 
@@ -166,8 +147,8 @@ PROCEDURE loadXref:
   END.
 
   /* Load Dataset */
-  DATASET dsCrossRef:READ-XML ("FILE",pcFileName,"EMPTY","",FALSE).
-
+  DATASET dsCrossRef:READ-XML ("FILE",pcFileName,"EMPTY",?,?) NO-ERROR.
+ 
   /* Correct file names in ttSource:
    * - strip excess path names
    * - set source type
@@ -201,7 +182,6 @@ PROCEDURE loadXref:
       PROCESS EVENTS.
     END. /* For Each Reference */
   END. /* transaction */
-  {&timerStop}
 END PROCEDURE. /* LoadXref */
 
 
@@ -210,13 +190,13 @@ PROCEDURE initXref:
    */
   DEFINE BUFFER bReference FOR ttReference.
   DEFINE BUFFER bRelation FOR xref_Relation.
-  {&timerStart}
 
   /* Find reference to compilation unit */
   FIND FIRST bReference WHERE bReference.Reference-type = 'compile' NO-ERROR.
   IF NOT AVAILABLE bReference THEN
   DO:
     PUBLISH 'debugInfo'("No COMPILE reference found in xref").
+    PROCESS EVENTS. 
     RETURN.
   END.
 
@@ -234,7 +214,6 @@ PROCEDURE initXref:
     DELETE bRelation.
   END. /* FOR EACH bRelation */
 
-  {&timerStop}
 END PROCEDURE. /* initXref */
 
 
@@ -251,7 +230,6 @@ PROCEDURE addRelation:
   DEFINE BUFFER bRelationType FOR xref_RelationType.
   DEFINE BUFFER bObject       FOR xref_Object.
   DEFINE BUFFER bObjectType   FOR xref_ObjectType.
-  {&timerStart}
 
   /* Ignore incomplete relations */
   IF   pcParentType   = ''
@@ -324,7 +302,6 @@ PROCEDURE addRelation:
     ASSIGN bRelationType.cRelationType = pcRelationType.
   END.
 
-  {&timerStop}
 END PROCEDURE. /* addRelation */
 
 
@@ -335,7 +312,6 @@ PROCEDURE addSchemaRelations:
   DEFINE INPUT PARAMETER pcFile  AS CHARACTER NO-UNDO.
   DEFINE INPUT PARAMETER pcField AS CHARACTER NO-UNDO.
   DEFINE INPUT PARAMETER pcIndex AS CHARACTER NO-UNDO.
-  {&timerStart}
 
   IF pcDb <> ''   AND pcFile <> ''  THEN RUN addRelation('Db'  , pcDb  , 'File' , pcFile , 'FILE' ).
   IF pcFile <> '' AND pcField <> '' THEN RUN addRelation('File', pcFile, 'Field', pcField, 'FIELD').
@@ -346,7 +322,6 @@ PROCEDURE addSchemaRelations:
   IF pcField <> '' THEN RUN addRelation('Program', gcProgramName, 'Field', pcField, 'PROG-FIELD').
   IF pcIndex <> '' THEN RUN addRelation('Program', gcProgramName, 'Index', pcIndex, 'PROG-INDEX').
 
-  {&timerStop}
 END PROCEDURE. /* addSchemaRelations */
 
 
@@ -357,7 +332,6 @@ PROCEDURE Process_ACCESS:
   DEFINE VARIABLE cDb    AS CHARACTER NO-UNDO.
   DEFINE VARIABLE cFile  AS CHARACTER NO-UNDO.
   DEFINE VARIABLE cField AS CHARACTER NO-UNDO.
-  {&timerStart}
   /*<Reference Reference-type="ACCESS" Object-identifier="arti-nr">
       <Object-context>ttPlti</Object-context>
       <Temp-ref>T</Temp-ref>
@@ -400,7 +374,6 @@ PROCEDURE Process_ACCESS:
     RUN addSchemaRelations(cDb, cFile, cField, '').
   END.
 
-  {&timerStop}
 END PROCEDURE. /* Process_Access */
 
 
@@ -408,7 +381,6 @@ PROCEDURE Process_CPSTREAM:
   /* Process CPINTERNAL
    */
   DEFINE PARAMETER BUFFER bReference FOR ttReference.
-  {&timerStart}
   /*<Reference Reference-type="CPSTREAM" Object-identifier="1252">
       <Object-context/>
       <Temp-ref/>
@@ -416,7 +388,6 @@ PROCEDURE Process_CPSTREAM:
   */
   RUN addRelation('Program', gcProgramName, 'CodePage', bReference.Object-identifier, 'CPSTREAM').
 
-  {&timerStop}
 END PROCEDURE. /* Process_CPSTREAM */
 
 
@@ -424,7 +395,6 @@ PROCEDURE Process_CPINTERNAL:
   /* Process CPINTERNAL
    */
   DEFINE PARAMETER BUFFER bReference FOR ttReference.
-  {&timerStart}
   /*<Reference Reference-type="CPINTERNAL" Object-identifier="1252">
       <Object-context/>
       <Temp-ref/>
@@ -432,7 +402,6 @@ PROCEDURE Process_CPINTERNAL:
   */
   RUN addRelation('Program', gcProgramName, 'CodePage', bReference.Object-identifier, 'CPINTERNAL').
 
-  {&timerStop}
 END PROCEDURE. /* Process_CPINTERNAL */
 
 
@@ -443,7 +412,7 @@ PROCEDURE Process_CREATE:
   DEFINE VARIABLE cDb    AS CHARACTER NO-UNDO.
   DEFINE VARIABLE cFile  AS CHARACTER NO-UNDO.
   DEFINE BUFFER bSource FOR ttSource. 
-  {&timerStart}
+  
   /*<Reference Reference-type="CREATE" Object-identifier="ttPlti">
       <Object-context/>
       <Temp-ref>T</Temp-ref>
@@ -471,7 +440,6 @@ PROCEDURE Process_CREATE:
     END.
   END.
 
-  {&timerStop}
 END PROCEDURE. /* Process_Create */
 
 
@@ -481,7 +449,7 @@ PROCEDURE Process_DELETE:
   DEFINE PARAMETER BUFFER bReference FOR ttReference.
   DEFINE VARIABLE cDb    AS CHARACTER NO-UNDO.
   DEFINE VARIABLE cFile  AS CHARACTER NO-UNDO.
-  {&timerStart}
+
   /*<Reference Reference-type="DELETE" Object-identifier="pkf.aadr">
       <Object-context/>
       <Temp-ref/>
@@ -502,7 +470,6 @@ PROCEDURE Process_DELETE:
     RUN addSchemaRelations(cDb, cFile, '', '').
   END.
 
-  {&timerStop}
 END PROCEDURE. /* Process_Delete */
 
 
@@ -510,7 +477,7 @@ PROCEDURE Process_DLL-ENTRY:
   /* Process DLL-ENTRY
    */
   DEFINE PARAMETER BUFFER bReference FOR ttReference.
-  {&timerStart}
+
   /*<Reference Reference-type="DLL-ENTRY" Object-identifier="RegOpenKeyA">
       <Object-context/>
       <Temp-ref/>
@@ -518,7 +485,6 @@ PROCEDURE Process_DLL-ENTRY:
   */
   RUN addRelation('Program', gcProgramName, 'DLL-Entry', bReference.Object-identifier, 'DLL-ENTRY').
 
-  {&timerStop}
 END PROCEDURE. /* Process_Function */
 
 
@@ -526,7 +492,7 @@ PROCEDURE Process_EXTERN:
   /* Process EXTERN
    */
   DEFINE PARAMETER BUFFER bReference FOR ttReference.
-  {&timerStart}
+
   /*    <Reference Reference-type="EXTERN" Object-identifier="setAdmNrFinance">
       <Source-guid>4I6QnhimMobpEZJFrhAllw</Source-guid>
       <Object-context/>
@@ -535,7 +501,6 @@ PROCEDURE Process_EXTERN:
   */
   RUN addRelation('Program', gcProgramName, 'Function', bReference.Object-identifier, 'EXTERN').
 
-  {&timerStop}
 END PROCEDURE. /* Process_EXTERN */
 
 
@@ -543,7 +508,7 @@ PROCEDURE Process_FUNCTION:
   /* Process FUNCTION
    */
   DEFINE PARAMETER BUFFER bReference FOR ttReference.
-  {&timerStart}                                      
+
   /*<Reference Reference-type="FUNCTION" Object-identifier="newstate">
       <Object-context/>
       <Temp-ref/>
@@ -551,7 +516,6 @@ PROCEDURE Process_FUNCTION:
   */
   RUN addRelation('Program', gcProgramName, 'Function', bReference.Object-identifier, 'FUNCTION').
 
-  {&timerStop}
 END PROCEDURE. /* Process_Function */
 
 
@@ -559,7 +523,7 @@ PROCEDURE Process_GLOBAL-VARIABLE:
   /* Process GLOBAL-VARIABLE
    */
   DEFINE PARAMETER BUFFER bReference FOR ttReference.
-  {&timerStart}
+
   /* <Reference Reference-type="GLOBAL-VARIABLE" Object-identifier="adm-broker-hdl">
       <Object-context/>
       <Temp-ref/>
@@ -567,7 +531,6 @@ PROCEDURE Process_GLOBAL-VARIABLE:
   */
   RUN addRelation('Program', gcProgramName, 'Variable', bReference.Object-identifier, 'GLOBAL-VARIABLE').
 
-  {&timerStop}
 END PROCEDURE. /* Process_GLOBAL-VARIABLE */
 
 
@@ -576,7 +539,6 @@ PROCEDURE Process_INCLUDE:
    */
   DEFINE PARAMETER BUFFER bReference FOR ttReference.
   DEFINE VARIABLE cInclude AS CHARACTER NO-UNDO.
-  {&timerStart}
 
   /*<Reference Reference-type="INCLUDE" Object-identifier="src/adm/method/browser.i">
       <Object-context/>
@@ -597,11 +559,11 @@ PROCEDURE Process_INCLUDE:
     OR cInclude MATCHES "<*" THEN
   DO:
     PUBLISH 'debugInfo'(SUBSTITUTE("Strange include &1, refstring=&2", cInclude,TRIM(bReference.Object-identifier)) ).
+    PROCESS EVENTS. 
   END.
 
   RUN addRelation('Program', gcProgramName, 'Include', cInclude, 'INCLUDE').
 
-  {&timerStop}
 END PROCEDURE. /* Process_Include */
 
 
@@ -609,7 +571,7 @@ PROCEDURE Process_NEW-SHR-DATASET:
   /* Process SHR-DATASET
   */
   DEFINE PARAMETER BUFFER bReference FOR ttReference.
-  {&timerStart}
+
   /*<Reference Reference-type="NEW-SHR-DATASET" Object-identifier="dsCust">
     <Object-context/>
     <Temp-ref/>
@@ -617,7 +579,6 @@ PROCEDURE Process_NEW-SHR-DATASET:
   */
   RUN addRelation('Program', gcProgramName, 'DataSet', bReference.Object-identifier, 'NEW-SHR-DATASET').
 
-  {&timerStop}
 END PROCEDURE. /* Process_NEW-SHR-DATASET */
 
 
@@ -625,7 +586,7 @@ PROCEDURE Process_NEW-SHR-FRAME:
   /* Process NEW-SHR-FRAME
   */
   DEFINE PARAMETER BUFFER bReference FOR ttReference.
-  {&timerStart}
+
   /*<Reference Reference-type="NEW-SHR-FRAME" Object-identifier="fCust">
     <Object-context/>
     <Temp-ref/>
@@ -633,7 +594,6 @@ PROCEDURE Process_NEW-SHR-FRAME:
   */
   RUN addRelation('Program', gcProgramName, 'Frame', bReference.Object-identifier, 'NEW-SHR-FRAME').
 
-  {&timerStop}
 END PROCEDURE. /* Process_NEW-SHR-FRAME */
 
 
@@ -641,7 +601,7 @@ PROCEDURE Process_NEW-SHR-TEMPTABLE:
   /* Process NEW-SHR-TEMPTABLE
    */
   DEFINE PARAMETER BUFFER bReference FOR ttReference.
-  {&timerStart}
+
   /*<Reference Reference-type="NEW-SHR-TEMPTABLE" Object-identifier="tmp-prod">
       <Object-context/>
     </Reference>
@@ -655,7 +615,7 @@ PROCEDURE Process_NEW-SHR-VARIABLE:
   /* Process NEW-SHR-VARIABLE
    */
   DEFINE PARAMETER BUFFER bReference FOR ttReference.
-  {&timerStart}
+
   /*  <Reference Reference-type="NEW-SHR-VARIABLE" Object-identifier="h_PDFinc">
       <Object-context/>
     </Reference> 
@@ -669,7 +629,7 @@ PROCEDURE Process_NEW-SHR-WORKFILE:
   /* Process NEW-SHR-WORKFILE
    */
   DEFINE PARAMETER BUFFER bReference FOR ttReference.
-  {&timerStart}
+
   /*  <Reference Reference-type="NEW-SHR-WORKFILE" Object-identifier="wOrders">
       <Object-context/>
     </Reference> 
@@ -683,7 +643,7 @@ PROCEDURE Process_PRIVATE-FUNCTION:
   /* Process PRIVATE-FUNCTION
    */
   DEFINE PARAMETER BUFFER bReference FOR ttReference.
-  {&timerStart}                                      
+
   /*<Reference Reference-type="PRIVATE-FUNCTION" Object-identifier="newstate">
       <Object-context/>
       <Temp-ref/>
@@ -691,7 +651,6 @@ PROCEDURE Process_PRIVATE-FUNCTION:
   */
   RUN addRelation('Program', gcProgramName, 'Function', bReference.Object-identifier, 'PRIVATE-FUNCTION').
 
-  {&timerStop}
 END PROCEDURE. /* Process_PRIVATE-FUNCTION */
 
 
@@ -699,14 +658,13 @@ PROCEDURE Process_PRIVATE-PROCEDURE:
   /* Process PRIVATE-PROCEDURE
    */
   DEFINE PARAMETER BUFFER bReference FOR ttReference.
-  {&timerStart}
+
   /*<Reference Reference-type="PRIVATE-PROCEDURE" Object-identifier="adm-open-query-cases">
       <Object-context/>
     </Reference>
   */
   RUN addRelation('Program', gcProgramName, 'Procedure', bReference.Object-identifier, 'PRIVATE-PROCEDURE').
 
-  {&timerStop}
 END PROCEDURE. /* Process_PRIVATE-PROCEDURE */
 
 
@@ -714,14 +672,13 @@ PROCEDURE Process_PROCEDURE:
   /* Process PROCEDURE
    */
   DEFINE PARAMETER BUFFER bReference FOR ttReference.
-  {&timerStart}
+
   /*<Reference Reference-type="PROCEDURE" Object-identifier="adm-open-query-cases">
       <Object-context/>
     </Reference>
   */
   RUN addRelation('Program', gcProgramName, 'Procedure', bReference.Object-identifier, 'PROCEDURE').
 
-  {&timerStop}
 END PROCEDURE. /* Process_PROCEDURE */
 
 
@@ -729,14 +686,13 @@ PROCEDURE Process_PUBLISH:
   /* Process PUBLISH 
   */
   DEFINE PARAMETER BUFFER bReference FOR ttReference.
-  {&timerStart}
+  
   /*<Reference Reference-type="PUBLISH" Object-identifier="getCalcPeildatum ">
       <Object-context/>
     </Reference>
   */
   RUN addRelation('Program', gcProgramName, 'Procedure', bReference.Object-identifier, 'PUBLISH').
 
-  {&timerStop}
 END PROCEDURE. /* Process_PUBLISH */
 
 
@@ -747,7 +703,7 @@ PROCEDURE Process_REFERENCE:
   DEFINE VARIABLE cDb    AS CHARACTER NO-UNDO.
   DEFINE VARIABLE cFile  AS CHARACTER NO-UNDO.
   DEFINE VARIABLE cField AS CHARACTER NO-UNDO.
-  {&timerStart}
+
 
   /*<Reference Reference-type="REFERENCE" Object-identifier="ttPlti">
       <Object-context/>
@@ -780,7 +736,6 @@ PROCEDURE Process_REFERENCE:
     RUN addSchemaRelations(cDb, cFile, cField, '').
   END.
 
-  {&timerStop}
 END PROCEDURE. /* Process_REFERENCE */
 
 
@@ -790,7 +745,6 @@ PROCEDURE Process_RUN:
   DEFINE PARAMETER BUFFER bReference FOR ttReference.
   DEFINE VARIABLE cProgram AS CHARACTER NO-UNDO.
   DEFINE BUFFER bReference2 FOR ttReference.
-  {&timerStart}
 
   /* <Reference Reference-type="RUN" Object-identifier="GET-ATTRIBUTE">
       <Object-context/>
@@ -829,7 +783,6 @@ PROCEDURE Process_RUN:
     END.
   END.
 
-  {&timerStop}
 END PROCEDURE. /* Process_RUN */
 
 
@@ -840,7 +793,6 @@ PROCEDURE Process_SEARCH:
   DEFINE VARIABLE cDb    AS CHARACTER NO-UNDO.
   DEFINE VARIABLE cFile  AS CHARACTER NO-UNDO.
   DEFINE VARIABLE cIndex AS CHARACTER NO-UNDO.
-  {&timerStart}
 
   /*<Reference Reference-type="SEARCH" Object-identifier="ttPlti">
       <Object-context>i-plti</Object-context>
@@ -869,7 +821,6 @@ PROCEDURE Process_SEARCH:
       RUN addRelation('Program', gcProgramName, 'Index', cIndex, 'WHOLE-INDEX').
   END.
 
-  {&timerStop}
 END PROCEDURE. /* Process_SEARCH */
 
 
@@ -877,7 +828,7 @@ PROCEDURE Process_SHR-DATASET:
   /* Process SHR-DATASET
   */
   DEFINE PARAMETER BUFFER bReference FOR ttReference.
-  {&timerStart}
+
   /*<Reference Reference-type="SHR-DATASET" Object-identifier="dsCust">
     <Object-context/>
     <Temp-ref/>
@@ -885,7 +836,6 @@ PROCEDURE Process_SHR-DATASET:
   */
   RUN addRelation('Program', gcProgramName, 'DataSet', bReference.Object-identifier, 'SHR-DATASET').
 
-  {&timerStop}
 END PROCEDURE. /* Process_SHR-DATASET */
 
 
@@ -893,7 +843,7 @@ PROCEDURE Process_SHR-FRAME:
   /* Process SHR-FRAME
   */
   DEFINE PARAMETER BUFFER bReference FOR ttReference.
-  {&timerStart}
+
   /*<Reference Reference-type="SHR-FRAME" Object-identifier="fCust">
     <Object-context/>
     <Temp-ref/>
@@ -901,7 +851,6 @@ PROCEDURE Process_SHR-FRAME:
   */
   RUN addRelation('Program', gcProgramName, 'Frame', bReference.Object-identifier, 'SHR-FRAME').
 
-  {&timerStop}
 END PROCEDURE. /* Process_SHR-FRAME */
 
 
@@ -909,7 +858,7 @@ PROCEDURE Process_SHR-TEMPTABLE:
   /* Process SHR-TEMPTABLE
   */
   DEFINE PARAMETER BUFFER bReference FOR ttReference.
-  {&timerStart}
+
   /*<Reference Reference-type="SHR-TEMPTABLE" Object-identifier="tmp-pop">
     <Object-context/>
     <Temp-ref/>
@@ -917,7 +866,6 @@ PROCEDURE Process_SHR-TEMPTABLE:
   */
   RUN addRelation('Program', gcProgramName, 'TempTable', bReference.Object-identifier, 'SHR-TEMPTABLE').
 
-  {&timerStop}
 END PROCEDURE. /* Process_SHR-TEMPTABLE */
 
 
@@ -925,7 +873,7 @@ PROCEDURE Process_SHR-WORKFILE:
   /* Process SHR-WORKFILE 
   */
   DEFINE PARAMETER BUFFER bReference FOR ttReference.
-  {&timerStart}
+
   /*<Reference Reference-type="SHR-WORKFILE" Object-identifier="tmp-pop">
     <Object-context/>
     <Temp-ref/>
@@ -933,7 +881,6 @@ PROCEDURE Process_SHR-WORKFILE:
   */
   RUN addRelation('Program', gcProgramName, 'WorkFile', bReference.Object-identifier, 'SHR-WORKFILE').
 
-  {&timerStop}
 END PROCEDURE. /* Process_SHR-TEMPTABLE */
 
 
@@ -941,7 +888,7 @@ PROCEDURE Process_SUBSCRIBE:
   /* Process SUBSCRIBE 
   */
   DEFINE PARAMETER BUFFER bReference FOR ttReference.
-  {&timerStart}
+
   /* <Reference Reference-type="SUBSCRIBE" Object-identifier="write-log ">
       <Object-context/>
       <Temp-ref/>
@@ -949,7 +896,6 @@ PROCEDURE Process_SUBSCRIBE:
   */
   RUN addRelation('Program', gcProgramName, 'Procedure', bReference.Object-identifier, 'SUBSCRIBE').
 
-  {&timerStop}
 END PROCEDURE. /* Process_SUBSCRIBE */
 
     
@@ -957,7 +903,6 @@ PROCEDURE Process_UNSUBSCRIBE:
   /* Process UNSUBSCRIBE 
   */
   DEFINE PARAMETER BUFFER bReference FOR ttReference.
-  {&timerStart}
   /* <Reference Reference-type="UNSUBSCRIBE" Object-identifier="write-log ">
       <Object-context/>
       <Temp-ref/>
@@ -965,7 +910,6 @@ PROCEDURE Process_UNSUBSCRIBE:
   */
   RUN addRelation('Program', gcProgramName, 'Procedure', bReference.Object-identifier, 'UNSUBSCRIBE').
 
-  {&timerStop}
 END PROCEDURE. /* Process_UNSUBSCRIBE */
 
 
@@ -977,7 +921,6 @@ PROCEDURE Process_UPDATE:
   DEFINE VARIABLE cFile  AS CHARACTER NO-UNDO.
   DEFINE VARIABLE cField AS CHARACTER NO-UNDO.
   DEFINE VARIABLE cIndex AS CHARACTER NO-UNDO.
-  {&timerStart}
 
   /*<Reference Reference-type="UPDATE" Object-identifier="adm-broker-hdl">
       <Object-context>SHARED</Object-context>
@@ -1015,7 +958,6 @@ PROCEDURE Process_UPDATE:
     RUN addRelation('Program', gcProgramName, 'Field', cField, "UPDATE").
     RUN addSchemaRelations(cDb, cFile, cField, '').
   END.
-  {&timerStop}
 END PROCEDURE. /* Process_UPDATE */
 
 
@@ -1041,7 +983,6 @@ END FUNCTION. /* getFileHash */
 FUNCTION stripPathNames RETURNS CHARACTER
   ( pcFileName AS CHARACTER ):
 
-  {&timerStart}
   pcFileName = TRIM(pcFileName).
   pcFileName = REPLACE(pcFileName,"~/","~\"). /* use one style of slashes */
   pcFileName = ENTRY(1,pcFileName, ' '). /* strip trailing parameter info */
@@ -1053,5 +994,5 @@ FUNCTION stripPathNames RETURNS CHARACTER
     pcFileName = SUBSTRING(pcFileName,3). /* strip .\ */
 
   RETURN pcFileName.
-  {&timerStop}
 END FUNCTION. /* stripPathNames */
+

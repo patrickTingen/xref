@@ -16,7 +16,19 @@ FOR EACH xref_object NO-LOCK
   END. 
 
   IF iCount < 3 THEN 
-    DISPLAY xref_object.cObjectName WITH STREAM-IO.
+  DO:
+    DISPLAY 
+      SUBSTITUTE('&1 (&2 x)', xref_object.cObjectName, iCount) FORMAT 'x(70)' WITH STREAM-IO NO-BOX.
+
+    FOR EACH xref_relation NO-LOCK
+      WHERE xref_relation.cChildType = 'Include'
+        AND xref_relation.cChildName = xref_object.cObjectName: 
+
+      DISPLAY 
+        xref_relation.cParentName FORMAT 'x(40)' NO-LABEL WITH COLUMN 5 STREAM-IO NO-BOX.
+    END. 
+    PUT UNFORMATTED SKIP(1).
+  END.
 
 END. 
 PUT UNFORMATTED SKIP(1).

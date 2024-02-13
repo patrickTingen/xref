@@ -7,9 +7,9 @@ DEFINE VARIABLE iCount   AS INTEGER   NO-UNDO.
 DEFINE VARIABLE iMinimum AS INTEGER   NO-UNDO INITIAL 0.
 
 FORM 
-  cType   FORMAT 'x(10)'
-  cName   FORMAT 'x(40)'
-  iCount  FORMAT 'zzzzzz'
+  cType   FORMAT 'x(10)'  COLUMN-LABEL 'Type'
+  cName   FORMAT 'x(30)'  COLUMN-LABEL 'Name'
+  iCount  FORMAT 'zzzzz9' COLUMN-LABEL 'Used'
   WITH FRAME fMain DOWN STREAM-IO.
 
 OUTPUT TO c:\temp\xref-schema-check.txt.
@@ -20,14 +20,14 @@ FOR EACH dictdb._file
   WHERE dictdb._file._file-num > 0
     AND dictdb._file._file-num < 32000:
 
-  cName = "dictdb." + _file._file-name.
+  cName = LDBNAME("dictdb") + "." + _file._file-name.
   iCount = 0.
   cType = 'File'.
 
   FOR EACH xref_relation NO-LOCK
     WHERE xref_relation.cParentType   = 'Program'
       AND xref_relation.cRelationType = 'PROG-FILE'
-      AND xref_relation.cChildName    = "dictdb." + _file._file-name:
+      AND xref_relation.cChildName    = cName:
     iCount = iCount + 1.
   END.
 
@@ -46,7 +46,7 @@ FOR EACH dictdb._file
     AND dictdb._file._file-num < 32000:
 
   FOR EACH dictdb._field OF dictdb._file:
-    cName  = "dictdb." + _file._file-name + "." + _field._field-name.
+    cName  = LDBNAME("dictdb") + "." + _file._file-name + "." + _field._field-name.
     iCount = 0.
     cType  = 'Field'.
 
@@ -73,7 +73,7 @@ FOR EACH dictdb._file
     AND dictdb._file._file-num < 32000:
 
   FOR EACH dictdb._index OF dictdb._file:
-    cName  = "dictdb." + _file._file-name + "." + _index._index-name.
+    cName  = LDBNAME("dictdb") + "." + _file._file-name + "." + _index._index-name.
     iCount = 0.
     cType  = 'Index'.
 
