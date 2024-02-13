@@ -2,6 +2,7 @@
 *.propath
 *.r
 .settings/
+*.log
 db/xrefdb-empty.zip
 db/xrefdb.db
 db/xrefdb.lk
@@ -12,7 +13,4 @@ db/xrefdb.lg
 db/xrefdb_7.d1
 db/xrefdb_8.d1
 html/
-palcos/
-src.debug/
 xml/
-src/connect.p
